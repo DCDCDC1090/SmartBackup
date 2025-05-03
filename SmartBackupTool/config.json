@@ -1,0 +1,33 @@
+{
+  "BackupSettings": {
+    "SourcePath": "C:\\",
+    "DestinationPath": "D:\\Backups",
+    "ExcludeFolders": [
+      "Windows",
+      "Program Files",
+      "Program Files (x86)",
+      "ProgramData",
+      "Temp"
+    ],
+    "BackupFrequency": "Daily",
+    "RetentionDays": 30,
+    "CompressionLevel": "Optimal"
+  },
+  "LogSettings": {
+    "LogPath": ".\\Logs",
+    "LogLevel": "Info",
+    "MaxLogFiles": 10,
+    "MaxLogSize": 5
+  },
+  "EmailNotification": {
+    "Enabled": false,
+    "SmtpServer": "",
+    "Port": 587,
+    "UseSsl": true,
+    "Username": "",
+    "Password": "",
+    "FromAddress": "",
+    "ToAddress": "",
+    "Subject": "SmartBackup Notification"
+  }
+}
