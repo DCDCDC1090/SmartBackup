@@ -138,3 +138,83 @@ When discussing new features with Claude, your priorities are:
 2. Automatic cleanup of old backups to manage disk space
 3. Scheduled execution using Windows Task Scheduler
 4. Potential email notifications for backup status
+
+
+# SmartBackup Project Map
+
+## Files and Their Purpose
+
+| Filename | Type | Purpose | Dependencies |
+|----------|------|---------|--------------|
+| SmartBackup.ps1 | PowerShell | Main entry point with backup functionality | config.json, Modules/ |
+| Run-SmartBackup.bat | Batch | Launcher that keeps terminal open | SmartBackup.ps1 |
+| config.json | JSON | Application configuration | None |
+
+## Directory Structure
+```
+SmartBackup/
+├── SmartBackup.ps1          # Main script
+├── Run-SmartBackup.bat      # Launcher
+├── config.json              # Configuration
+├── Modules/                 # PowerShell modules
+│   ├── BackupFunctions.psm1 # Core backup functionality
+│   ├── ConfigManager.psm1   # Configuration management
+│   ├── FileScanner.psm1     # File scanning and filtering
+│   └── LogManager.psm1      # Logging utilities
+├── Scripts/                 # Additional scripts
+│   ├── Cleanup-OldBackups.ps1  # Maintenance script
+│   └── Schedule-Backup.ps1     # Task scheduler helper
+└── Logs/                    # Generated log files
+    └── SmartBackup_*.log    # Timestamped logs
+```
+
+## Workflow Diagram
+```
+User → Run-SmartBackup.bat → SmartBackup.ps1 → [Load Modules] → Read config.json → Perform backup → Create logs
+```
+
+## Module Components
+
+### Modules/BackupFunctions.psm1
+- **Start-SmartBackup**: Main backup function
+- **New-BackupArchive**: Creates compressed archives
+- **Copy-BackupItems**: Copies files with filtering
+
+### Modules/ConfigManager.psm1
+- **Get-BackupConfig**: Loads and validates configuration
+- **Test-ConfigurationPaths**: Validates paths exist
+- **Save-ConfigSettings**: Updates configuration file
+
+### Modules/FileScanner.psm1
+- **Get-BackupCandidates**: Identifies files for backup
+- **Test-ExclusionPattern**: Applies exclusion rules
+- **Measure-BackupSize**: Calculates total backup size
+
+### Modules/LogManager.psm1
+- **Write-BackupLog**: Handles logging to console and file
+- **Initialize-LogFile**: Creates log file with headers
+- **Clear-OldLogs**: Removes outdated log files
+
+## Terminal Closing Issue
+
+### Problem
+The PowerShell window closes immediately after execution, preventing users from seeing error messages.
+
+### Solutions
+1. **Integrated Error Handling**: Added try/catch/finally blocks with Read-Host pause
+2. **Comprehensive Logging**: All operations logged to timestamped files
+3. **Batch File Launcher**: Keeps the console window open
+
+## How to Modify Configuration
+Edit the config.json file to:
+1. Change source paths (what to backup)
+2. Change destination path (where to store backups)
+3. Add/modify exclusion patterns
+4. Update backup settings (compression, retention)
+
+## Next Steps for Development
+1. Add backup compression functionality
+2. Implement automatic cleanup of old backups
+3. Add scheduled task creation
+4. Create a restore function
+5. Add email notifications for backup status
