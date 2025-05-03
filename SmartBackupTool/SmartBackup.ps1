@@ -1,144 +1,192 @@
-# SmartBackup.ps1 - Main entry script for Smart Backup Tool
-#
-# Usage:
-# .\SmartBackup.ps1 # Run with GUI
-# .\SmartBackup.ps1 -AutoRun # Run scheduled backup without GUI
-# .\SmartBackup.ps1 -ProfileName Work # Run with specific profile
+#requires -Version 5.1
+<#
+.SYNOPSIS
+    SmartBackup - C Drive Backup Tool
+.DESCRIPTION
+    A PowerShell script for backing up important files from C Drive
+.NOTES
+    File Name      : SmartBackup.ps1
+    Prerequisite   : PowerShell 5.1 or later
+.EXAMPLE
+    .\SmartBackup.ps1
+#>
 
-param (
-    [switch]$AutoRun,
-    [string]$ProfileName = "Default"
-)
+# Setup logging
+$LogFolder = ".\Logs"
+$LogFile = Join-Path -Path $LogFolder -ChildPath "SmartBackup_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 
-# Script metadata
-$script:Version = "2.0.0"
-$script:ScriptPath = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
-$script:ModulesPath = Join-Path -Path $script:ScriptPath -ChildPath "Modules"
-$script:ConfigPath = Join-Path -Path $script:ScriptPath -ChildPath "config"
-$script:LogsPath = Join-Path -Path $script:ScriptPath -ChildPath "logs"
-$script:testSessionId = Get-Date -Format "yyyyMMdd_HHmmss"
+# Create log directory if it doesn't exist
+if (-not (Test-Path -Path $LogFolder)) {
+    New-Item -Path $LogFolder -ItemType Directory | Out-Null
+}
 
-# Ensure directories exist
-foreach ($path in @($script:ModulesPath, $script:ConfigPath, $script:LogsPath)) {
-    if (-not (Test-Path -Path $path -PathType Container)) {
-        New-Item -Path $path -ItemType Directory -Force | Out-Null
+# Function to write to log file
+function Write-Log {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$Message,
+        
+        [Parameter()]
+        [ValidateSet('INFO', 'WARNING', 'ERROR')]
+        [string]$Level = 'INFO'
+    )
+    
+    $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $LogMessage = "[$Timestamp] [$Level] $Message"
+    
+    # Write to console with color coding
+    switch ($Level) {
+        'INFO'    { Write-Host $LogMessage -ForegroundColor Cyan }
+        'WARNING' { Write-Host $LogMessage -ForegroundColor Yellow }
+        'ERROR'   { Write-Host $LogMessage -ForegroundColor Red }
+    }
+    
+    # Write to log file
+    Add-Content -Path $LogFile -Value $LogMessage
+}
+
+# Function to load configuration
+function Get-BackupConfig {
+    param (
+        [string]$ConfigPath = ".\config.json"
+    )
+    
+    try {
+        if (Test-Path -Path $ConfigPath) {
+            $ConfigJson = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Json
+            Write-Log "Configuration loaded successfully"
+            return $ConfigJson
+        } else {
+            Write-Log "Configuration file not found: $ConfigPath" -Level 'ERROR'
+            throw "Configuration file not found: $ConfigPath"
+        }
+    } catch {
+        Write-Log "Error loading configuration: $_" -Level 'ERROR'
+        throw "Unable to load configuration: $_"
     }
 }
 
-# Bootstrap: Create default config if missing
-$defaultConfigPath = Join-Path -Path $script:ConfigPath -ChildPath "config.json"
-if (-not (Test-Path -Path $defaultConfigPath -PathType Leaf)) {
-    @{
-        DefaultBackupRoot = "D:\NEW_OS_BACKUP"
-        TempBackupRoot = "D:\NEW_OS_BACKUP\_tempReview"
-        DefaultProfileName = "Default"
-        EnableReviewMode = $true
-        EnableScreenshot = $true
-        DisableFirefoxBackup = $false
-        EnableTestRestore = $true
-        TestModeEnabled = $false
-        Profiles = @{
-            Default = @{
-                Description = "Default backup profile"
-                Incremental = $false
-                Compression = @{
-                    Enabled = $false
-                    Level = "Normal"
+# Function to perform backup
+function Start-SmartBackup {
+    param (
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Config
+    )
+    
+    Write-Log "Starting backup process..."
+    
+    # Validate source directories
+    foreach ($Source in $Config.SourcePaths) {
+        if (-not (Test-Path -Path $Source)) {
+            Write-Log "Source path not found: $Source" -Level 'WARNING'
+        }
+    }
+    
+    # Validate destination
+    if (-not (Test-Path -Path $Config.DestinationPath)) {
+        Write-Log "Creating destination directory: $($Config.DestinationPath)"
+        try {
+            New-Item -Path $Config.DestinationPath -ItemType Directory -Force | Out-Null
+        } catch {
+            Write-Log "Failed to create destination directory: $_" -Level 'ERROR'
+            throw "Failed to create destination directory: $_"
+        }
+    }
+    
+    # Create backup folder with timestamp
+    $BackupFolder = Join-Path -Path $Config.DestinationPath -ChildPath "Backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+    New-Item -Path $BackupFolder -ItemType Directory | Out-Null
+    Write-Log "Created backup folder: $BackupFolder"
+    
+    # Perform backup for each source
+    foreach ($Source in $Config.SourcePaths) {
+        if (Test-Path -Path $Source) {
+            Write-Log "Backing up: $Source"
+            
+            # Get relative path for creating folder structure
+            $DestSubPath = Split-Path -Path $Source -Leaf
+            $DestPath = Join-Path -Path $BackupFolder -ChildPath $DestSubPath
+            
+            try {
+                # Copy with progress display
+                $CopyParams = @{
+                    Path = $Source
+                    Destination = $DestPath
+                    Recurse = $true
+                    Force = $true
                 }
+                
+                if ($Config.ExcludePatterns -and $Config.ExcludePatterns.Count -gt 0) {
+                    Write-Log "Applying exclusion patterns"
+                    $Items = Get-ChildItem -Path $Source -Recurse | 
+                             Where-Object { 
+                                 $Item = $_
+                                 -not ($Config.ExcludePatterns | Where-Object { $Item.FullName -like $_ })
+                             }
+                    
+                    foreach ($Item in $Items) {
+                        $RelativePath = $Item.FullName.Substring($Source.Length)
+                        $TargetPath = Join-Path -Path $DestPath -ChildPath $RelativePath
+                        
+                        if ($Item.PSIsContainer) {
+                            if (-not (Test-Path -Path $TargetPath)) {
+                                New-Item -Path $TargetPath -ItemType Directory -Force | Out-Null
+                            }
+                        } else {
+                            $TargetDir = Split-Path -Path $TargetPath -Parent
+                            if (-not (Test-Path -Path $TargetDir)) {
+                                New-Item -Path $TargetDir -ItemType Directory -Force | Out-Null
+                            }
+                            Copy-Item -Path $Item.FullName -Destination $TargetPath -Force
+                        }
+                    }
+                } else {
+                    # Simple copy if no exclusions
+                    Copy-Item @CopyParams
+                }
+                
+                Write-Log "Successfully backed up: $Source"
+            } catch {
+                Write-Log "Error backing up $Source`: $_" -Level 'ERROR'
             }
         }
-    } | ConvertTo-Json -Depth 10 | Set-Content -Path $defaultConfigPath -Encoding UTF8
+    }
+    
+    Write-Log "Backup completed to: $BackupFolder"
+    return $BackupFolder
 }
 
-# Import required .NET assemblies
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
-# Import core required modules
-$modulesToImport = @(
-    "Config",
-    "FileUtils"
-)
-
-foreach ($module in $modulesToImport) {
-    $modulePath = Join-Path -Path $script:ModulesPath -ChildPath "$module.psm1"
-    if (Test-Path -Path $modulePath -PathType Leaf) {
-        Import-Module $modulePath -Force -ErrorAction Stop
-    } else {
-        Write-Warning "Core module not found: $modulePath"
-        exit 1
-    }
+# Main execution block with error handling
+try {
+    Write-Log "Starting SmartBackup..."
+    
+    # Load configuration
+    $Config = Get-BackupConfig -ConfigPath ".\config.json"
+    
+    # Perform backup
+    $BackupLocation = Start-SmartBackup -Config $Config
+    
+    Write-Log "Backup completed successfully to $BackupLocation"
 }
-
-# Initialize error handling
-Initialize-ErrorHandling -LogPath $script:LogsPath
-
-# Initialize configuration
-$config = Initialize-Configuration -ConfigPath $script:ConfigPath -ProfileName $ProfileName
-
-# Apply DPI awareness for better UI scaling
-Set-DPIAwareness
-
-# Import GUI modules if not in AutoRun mode
-if (-not $AutoRun) {
-    # Import operation modules first (needed by GUI)
-    $operationModules = @(
-        "BackupOperations",
-        "Compression",
-        "IncrementalBackup",
-        "Scheduler",
-        "TestMode"
-    )
+catch {
+    $ErrorMessage = $_.Exception.Message
+    $LineNumber = $_.InvocationInfo.ScriptLineNumber
+    $Command = $_.InvocationInfo.Line
+    $ScriptName = $_.InvocationInfo.ScriptName
     
-    foreach ($module in $operationModules) {
-        $modulePath = Join-Path -Path $script:ModulesPath -ChildPath "$module.psm1"
-        if (Test-Path -Path $modulePath -PathType Leaf) {
-            Import-Module $modulePath -Force -ErrorAction Stop
-        } else {
-            Write-Warning "Operation module not found: $modulePath"
-            # Not exiting since these are optional for basic UI functionality
-        }
-    }
+    Write-Log "Error in script $ScriptName at line $LineNumber" -Level 'ERROR'
+    Write-Log "Command: $Command" -Level 'ERROR'
+    Write-Log "Error Message: $ErrorMessage" -Level 'ERROR'
+    Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level 'ERROR'
     
-    # Import GUI modules
-    $guiModules = @(
-        "CoreGUI",
-        "FolderListModule",
-        "ActionModule",
-        "ConfigModule",
-        "ConfigModuleUI"
-    )
-    
-    foreach ($module in $guiModules) {
-        $modulePath = Join-Path -Path $script:ModulesPath -ChildPath "$module.psm1"
-        if (Test-Path -Path $modulePath -PathType Leaf) {
-            Import-Module $modulePath -Force -ErrorAction Stop
-        } else {
-            Write-Warning "GUI module not found: $modulePath"
-            exit 1
-        }
-    }
-    
-    # Start the GUI
-    Show-BackupGUI -Config $config
-} else {
-    # Import operation modules for AutoRun mode
-    $operationModules = @(
-        "BackupOperations",
-        "Compression",
-        "IncrementalBackup"
-    )
-    
-    foreach ($module in $operationModules) {
-        $modulePath = Join-Path -Path $script:ModulesPath -ChildPath "$module.psm1"
-        if (Test-Path -Path $modulePath -PathType Leaf) {
-            Import-Module $modulePath -Force -ErrorAction Stop
-        } else {
-            Write-Warning "Operation module not found: $modulePath"
-            exit 1
-        }
-    }
-    
-    # Start automated backup
-    Start-AutomatedBackup -Config $config
+    # Display error summary to console
+    Write-Host "`n===== ERROR SUMMARY =====" -ForegroundColor Red
+    Write-Host "An error occurred during backup execution" -ForegroundColor Red
+    Write-Host "See log file for details: $LogFile" -ForegroundColor Yellow
+    Write-Host "=======================`n" -ForegroundColor Red
+}
+finally {
+    # This ensures the terminal stays open
+    Write-Host "`nPress Enter to exit..." -ForegroundColor Green
+    Read-Host
 }
