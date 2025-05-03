@@ -82,3 +82,59 @@ pause
 ## Contact/Notes
 - GitHub Repository: https://github.com/DCDCDC1090/SmartBackup
 - For issues or contributions, please create a GitHub issue
+
+
+# Instructions for Next Claude Chat
+
+Copy and paste the following text to continue your work with Claude on the PowerShell-based SmartBackup project:
+
+```
+I'm continuing work on my SmartBackup project that backs up files from C Drive. Our previous conversation focused on creating a PowerShell-based solution with proper error handling to address terminal closing issues.
+
+GitHub repo: https://github.com/DCDCDC1090/SmartBackup
+
+In our last session, you provided:
+1. A comprehensive SmartBackup.ps1 script
+2. config.json configuration file
+3. Run-SmartBackup.bat launcher
+4. Documentation and project structure
+
+I've implemented these solutions but need help with the following:
+
+1. I want to add compression functionality to create ZIP archives of backups
+2. I'd like to implement a cleanup feature that removes backups older than X days
+3. I need help creating a scheduled task to run the backup automatically
+
+Please help me enhance the PowerShell script with these additional features.
+
+Important files to focus on:
+- SmartBackup.ps1 - The main script to enhance
+- config.json - Configuration that may need new parameters
+```
+
+## Key Details About Your Project
+
+If Claude asks for more information about your project, you can share:
+
+1. SmartBackup is a PowerShell-based utility for backing up important files from C Drive
+2. The main issue was the terminal window closing before error messages could be seen
+3. You've implemented the error handling, logging, and batch launcher solutions
+4. Your goal now is to add more advanced features to make the backup tool more useful
+5. You prefer PowerShell solutions as they integrate well with Windows
+
+## Terminal Issue Resolution Confirmation
+
+If Claude asks about the terminal closing issue:
+
+1. The implemented solution with try/catch/finally blocks and Read-Host pause is working
+2. The batch file launcher successfully keeps the window open after script completion
+3. The logging system now captures all errors and operations for later review
+
+## Feature Enhancement Priorities
+
+When discussing new features with Claude, your priorities are:
+
+1. File compression to reduce backup size
+2. Automatic cleanup of old backups to manage disk space
+3. Scheduled execution using Windows Task Scheduler
+4. Potential email notifications for backup status
